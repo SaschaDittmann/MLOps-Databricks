@@ -341,7 +341,7 @@ jobs:
     - name: Get Image ID
       run: |
         echo "Retrieving Image ID..."
-        model_image_id=$(cat image.json | jq -r ".model_image_id")
+        model_image_id=$(cat model_image_id/image.json | jq -r ".model_image_id")
         echo "  Image ID: $model_image_id"
         
         echo "::set-env name=AZUREML_IMAGE_ID::$model_image_id"

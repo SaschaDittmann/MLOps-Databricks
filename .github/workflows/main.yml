@@ -1,6 +1,6 @@
 name: Wine Quality Machine Learning Pipeline
 
-on: 
+on:
   push:
     branches:    
       - master
@@ -10,7 +10,17 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABRICKS_HOST: https://westeurope.azuredatabricks.net
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
       DATABRICKS_NOTEBOOK_PATH: /Shared/MLFlow
+      DATABRICKS_CLUSTER_NAME: ML
+      DATABRICKS_CLUSTER_SPARK_VERSION: 5.5.x-cpu-ml-scala2.11
+      DATABRICKS_CLUSTER_NODE_TYPE_ID: Standard_DS3_v2
+      DATABRICKS_CLUSTER_DRIVER_NODE_TYPE_ID: Standard_DS3_v2
+      DATABRICKS_CLUSTER_AUTOTERMINATION_MINUTES: 15
+      DATABRICKS_CLUSTER_WORKERS_MIN: 1
+      DATABRICKS_CLUSTER_WORKERS_MAX: 4
+      DATABRICKS_JOB_TRAIN_NAME: Wine Quality (Train)
+      DATABRICKS_JOB_BUILDIMAGE_NAME: Wine Quality (Build Container Image)
     steps:
     - uses: actions/checkout@v1
     - name: Set up Python 3.6
@@ -28,8 +38,8 @@ jobs:
         # We need to write the pipe the conf into databricks configure --token since
         # that command only takes inputs from stdin. 
         conf=`cat << EOM
-        $(!DATABRICKS_HOST)
-        $(!DATABRICKS_TOKEN)
+        $DATABRICKS_HOST
+        $DATABRICKS_TOKEN
         EOM`
         
         # For password auth there are three lines expected
@@ -39,3 +49,330 @@ jobs:
       run: 'databricks workspace mkdirs "$DATABRICKS_NOTEBOOK_PATH"'
     - name: Import Notebooks
       run: 'databricks workspace import_dir --overwrite notebooks "$DATABRICKS_NOTEBOOK_PATH"'
+    - name: Create / Get Cluster
+      run: |
+        set -x
+        
+        DATABRICKS_CLUSTER_ID=$(databricks clusters list | grep "$DATABRICKS_CLUSTER_NAME" | awk '{print $1}')
+        
+        if [ -z "$DATABRICKS_CLUSTER_ID" ]
+        then
+        JSON=`cat << EOM
+        {
+          "cluster_name": "$DATABRICKS_CLUSTER_NAME",
+          "spark_version": "$DATABRICKS_CLUSTER_SPARK_VERSION",
+          "spark_conf": {
+            "spark.databricks.delta.preview.enabled": "true"
+          },
+          "node_type_id": "$DATABRICKS_CLUSTER_NODE_TYPE_ID",
+          "driver_node_type_id": "$DATABRICKS_CLUSTER_DRIVER_NODE_TYPE_ID",
+          "spark_env_vars": {
+            "PYSPARK_PYTHON": "/databricks/python3/bin/python3"
+          },
+          "autotermination_minutes": $DATABRICKS_CLUSTER_AUTOTERMINATION_MINUTES,
+          "enable_elastic_disk": true,
+          "autoscale": {
+            "min_workers": $DATABRICKS_CLUSTER_WORKERS_MIN,
+            "max_workers": $DATABRICKS_CLUSTER_WORKERS_MAX
+          },
+          "init_scripts_safe_mode": false
+        }
+        EOM`
+        DATABRICKS_CLUSTER_ID=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
+        sleep 10
+        fi
+
+        echo "::set-env name=DATABRICKS_CLUSTER_ID::$DATABRICKS_CLUSTER_ID"
+    - name: Start Cluster
+      run: |
+        DATABRICKS_CLUSTER_STATE=$(databricks clusters get --cluster-id "$DATABRICKS_CLUSTER_ID" | jq -r ".state")
+        if [ $DATABRICKS_CLUSTER_STATE == "TERMINATED" ]
+        then
+          echo "Starting Databricks Cluster..."
+          databricks clusters start --cluster-id "$DATABRICKS_CLUSTER_ID"
+          sleep 30
+          DATABRICKS_CLUSTER_STATE=$(databricks clusters get --cluster-id "$DATABRICKS_CLUSTER_ID" | jq -r ".state")
+          echo "Cluster State: $DATABRICKS_CLUSTER_STATE"
+        fi
+        
+        while [ $DATABRICKS_CLUSTER_STATE == "PENDING" ]
+        do
+          sleep 30
+          DATABRICKS_CLUSTER_STATE=$(databricks clusters get --cluster-id "$DATABRICKS_CLUSTER_ID" | jq -r ".state")
+          echo "Cluster State: $DATABRICKS_CLUSTER_STATE"
+        done
+        
+        if [ $DATABRICKS_CLUSTER_STATE == "RUNNING" ]
+        then
+          exit 0
+        else
+          exit 1
+        fi
+    - name: Create / Get Training Job
+      run: |
+        set -x
+          
+        DATABRICKS_JOB_TRAIN_ID=$(databricks jobs list | grep "$DATABRICKS_JOB_TRAIN_NAME" | awk '{print $1}')
+        
+        if [ -z "$DATABRICKS_JOB_TRAIN_ID" ]
+        then
+        JSON=`cat << EOM
+        {
+          "notebook_task": {
+            "notebook_path": "$DATABRICKS_NOTEBOOK_PATH/train",
+            "base_parameters": {
+              "alpha": "0.5",
+              "l1_ratio": "0.5"
+            }
+          },
+          "existing_cluster_id": "$DATABRICKS_CLUSTER_ID",
+          "name": "$DATABRICKS_JOB_TRAIN_NAME",
+          "max_concurrent_runs": 3,
+          "timeout_seconds": 86400,
+          "libraries": [],
+          "email_notifications": {}
+        }
+        EOM`
+        DATABRICKS_JOB_TRAIN_ID=$(databricks jobs create --json "$JSON" | jq ".job_id")
+        fi
+        
+        echo "::set-env name=DATABRICKS_JOB_TRAIN_ID::$DATABRICKS_JOB_TRAIN_ID"
+    - name: Run Training Jobs
+      run: |
+        echo "Running job with ID $DATABRICKS_JOB_TRAIN_ID with alpha=0.1, l1_ratio=0.1..."
+        run_id1=$(databricks jobs run-now --job-id $DATABRICKS_JOB_TRAIN_ID --notebook-params '{ "alpha": "0.1", "l1_ratio": "0.1" }' | jq ".run_id")
+        echo "  Run ID: $run_id1"
+        
+        echo "Running job with ID $DATABRICKS_JOB_TRAIN_ID with alpha=0.3, l1_ratio=0.3..."
+        run_id2=$(databricks jobs run-now --job-id $DATABRICKS_JOB_TRAIN_ID --notebook-params '{ "alpha": "0.3", "l1_ratio": "0.3" }' | jq ".run_id")
+        echo "  Run ID: $run_id2"
+        
+        echo "Running job with ID $DATABRICKS_JOB_TRAIN_ID with alpha=0.5, l1_ratio=0.5..."
+        run_id3=$(databricks jobs run-now --job-id $DATABRICKS_JOB_TRAIN_ID --notebook-params '{ "alpha": "0.5", "l1_ratio": "0.5" }' | jq ".run_id")
+        echo "  Run ID: $run_id3"
+        
+        run_state=$(databricks runs get --run-id $run_id1 | jq -r ".state.life_cycle_state")
+        echo "Run State (ID $run_id1): $run_state"
+        while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
+        do
+          sleep 30
+          run_state=$(databricks runs get --run-id $run_id1 | jq -r ".state.life_cycle_state")
+          echo "Run State (ID $run_id1): $run_state"
+        done
+        result_state1=$(databricks runs get --run-id $run_id1 | jq -r ".state.result_state")
+        state_message1=$(databricks runs get --run-id $run_id1 | jq -r ".state.state_message")
+        echo "Result State (ID $run_id1): $result_state1, Message: $state_message1"
+        
+        run_state=$(databricks runs get --run-id $run_id2 | jq -r ".state.life_cycle_state")
+        echo "Run State (ID $run_id2): $run_state"
+        while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
+        do
+          sleep 30
+          run_state=$(databricks runs get --run-id $run_id2 | jq -r ".state.life_cycle_state")
+          echo "Run State (ID $run_id2): $run_state"
+        done
+        result_state2=$(databricks runs get --run-id $run_id2 | jq -r ".state.result_state")
+        state_message2=$(databricks runs get --run-id $run_id2 | jq -r ".state.state_message")
+        echo "Result State (ID $run_id2): $result_state2, Message: $state_message2"
+        
+        run_state=$(databricks runs get --run-id $run_id3 | jq -r ".state.life_cycle_state")
+        echo "Run State (ID $run_id3): $run_state"
+        while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
+        do
+          sleep 30
+          run_state=$(databricks runs get --run-id $run_id3 | jq -r ".state.life_cycle_state")
+          echo "Run State (ID $run_id3): $run_state"
+        done
+        result_state3=$(databricks runs get --run-id $run_id3 | jq -r ".state.result_state")
+        state_message3=$(databricks runs get --run-id $run_id3 | jq -r ".state.state_message")
+        echo "Result State (ID $run_id3): $result_state3, Message: $state_message3"
+        
+        if [ $result_state1 == "SUCCESS" -a $result_state2 == "SUCCESS" -a $result_state3 == "SUCCESS" ]
+        then
+          exit 0
+        else
+          exit 1
+        fi
+    - name: Build Container Image
+      run: |    
+        JSON=`cat << EOM
+        {
+          "notebook_task": {
+            "notebook_path": "$DATABRICKS_NOTEBOOK_PATH/serving_build_container_image"
+          },
+          "existing_cluster_id": "$DATABRICKS_CLUSTER_ID",
+          "run_name": "$DATABRICKS_JOB_BUILDIMAGE_NAME",
+          "max_concurrent_runs": 1,
+          "timeout_seconds": 86400,
+          "libraries": [],
+          "email_notifications": {}
+        }
+        EOM`
+        
+        echo "Building Container Image ..."
+        run_id=$(databricks runs submit --json "$JSON" | jq ".run_id")
+        echo "  Run ID: $run_id"
+        
+        run_state=$(databricks runs get --run-id $run_id | jq -r ".state.life_cycle_state")
+        echo "Run State (ID $run_id): $run_state"
+        while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
+        do
+          sleep 30
+          run_state=$(databricks runs get --run-id $run_id | jq -r ".state.life_cycle_state")
+          echo "Run State (ID $run_id): $run_state"
+        done
+        result_state=$(databricks runs get --run-id $run_id | jq -r ".state.result_state")
+        state_message=$(databricks runs get --run-id $run_id | jq -r ".state.state_message")
+        echo "Result State (ID $run_id): $result_state, Message: $state_message"
+        
+        if [ $result_state == "SUCCESS" ]
+        then
+          mkdir -p metadata
+          databricks runs get-output --run-id $run_id | jq -r .notebook_output.result | tee image.json
+          exit 0
+        else
+          exit 1
+        fi
+    - name: Upload Model Image ID
+      uses: actions/upload-artifact@v1
+      with:
+        name: model_image_id
+        path: image.json
+  staging:
+    needs: train
+    runs-on: ubuntu-latest
+    env:
+      DATABRICKS_HOST: https://westeurope.azuredatabricks.net
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      DATABRICKS_NOTEBOOK_PATH: /Shared/MLFlow
+      DATABRICKS_CLUSTER_NAME: ML
+      DATABRICKS_CLUSTER_SPARK_VERSION: 5.5.x-cpu-ml-scala2.11
+      DATABRICKS_CLUSTER_NODE_TYPE_ID: Standard_DS3_v2
+      DATABRICKS_CLUSTER_DRIVER_NODE_TYPE_ID: Standard_DS3_v2
+      DATABRICKS_CLUSTER_AUTOTERMINATION_MINUTES: 15
+      DATABRICKS_CLUSTER_WORKERS_MIN: 1
+      DATABRICKS_CLUSTER_WORKERS_MAX: 4
+      DATABRICKS_JOB_DEPLOYTOACI_NAME: Wine Quality (Deploy To ACI)
+    steps:
+    - name: Download Model Image ID
+      uses: actions/download-artifact@v1
+      with:
+        name: model_image_id
+    - name: Set up Python 3.6
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.6
+    - name: Install Databricks CLI
+      run: |
+        python -m pip install --upgrade pip
+        pip install -U databricks-cli
+    - name: Configure Databricks CLI
+      run: |
+        set -x
+        
+        # We need to write the pipe the conf into databricks configure --token since
+        # that command only takes inputs from stdin. 
+        conf=`cat << EOM
+        $DATABRICKS_HOST
+        $DATABRICKS_TOKEN
+        EOM`
+        
+        # For password auth there are three lines expected
+        # hostname, username, password
+        echo "$conf" | databricks configure --token
+    - name: Create / Get Cluster
+      run: |
+        set -x
+        
+        DATABRICKS_CLUSTER_ID=$(databricks clusters list | grep "$DATABRICKS_CLUSTER_NAME" | awk '{print $1}')
+        
+        if [ -z "$DATABRICKS_CLUSTER_ID" ]
+        then
+        JSON=`cat << EOM
+        {
+          "cluster_name": "$DATABRICKS_CLUSTER_NAME",
+          "spark_version": "$DATABRICKS_CLUSTER_SPARK_VERSION",
+          "spark_conf": {
+            "spark.databricks.delta.preview.enabled": "true"
+          },
+          "node_type_id": "$DATABRICKS_CLUSTER_NODE_TYPE_ID",
+          "driver_node_type_id": "$DATABRICKS_CLUSTER_DRIVER_NODE_TYPE_ID",
+          "spark_env_vars": {
+            "PYSPARK_PYTHON": "/databricks/python3/bin/python3"
+          },
+          "autotermination_minutes": $DATABRICKS_CLUSTER_AUTOTERMINATION_MINUTES,
+          "enable_elastic_disk": true,
+          "autoscale": {
+            "min_workers": $DATABRICKS_CLUSTER_WORKERS_MIN,
+            "max_workers": $DATABRICKS_CLUSTER_WORKERS_MAX
+          },
+          "init_scripts_safe_mode": false
+        }
+        EOM`
+        DATABRICKS_CLUSTER_ID=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
+        sleep 10
+        fi
+
+        echo "::set-env name=DATABRICKS_CLUSTER_ID::$DATABRICKS_CLUSTER_ID"
+    - name: Create / Get Deploy ACI Job
+      run: |
+        set -x
+        
+        job_id=$(databricks jobs list | grep "$DATABRICKS_JOB_DEPLOYTOACI_NAME" | awk '{print $1}')
+        
+        if [ -z "$job_id" ]
+        then
+        JSON=`cat << EOM
+        {
+          "notebook_task": {
+            "notebook_path": "$DATABRICKS_NOTEBOOK_PATH/serving_deploy_to_aci",
+            "base_parameters": {
+              "model_image_id": ""
+            }
+          },
+          "existing_cluster_id": "$DATABRICKS_CLUSTER_ID",
+          "name": "$DATABRICKS_JOB_DEPLOYTOACI_NAME",
+          "max_concurrent_runs": 1,
+          "timeout_seconds": 86400,
+          "libraries": [],
+          "email_notifications": {}
+        }
+        EOM`
+        
+        job_id=$(databricks jobs create --json "$JSON" | jq ".job_id")
+        fi
+        
+        echo "::set-env name=DATABRICKS_JOB_DEPLOYTOACI_ID::$DATABRICKS_CLUSTER_ID"
+    
+    - name: Get Image ID
+      run: |
+        echo "Retrieving Image ID..."
+        model_image_id=$(cat model_image_id/image.json | jq -r ".model_image_id")
+        echo "  Image ID: $model_image_id"
+        
+        echo "::set-env name=AZUREML_IMAGE_ID::$model_image_id"
+    - name: Deploy To ACI
+      run: |
+        echo "Running job with ID $DATABRICKS_JOB_DEPLOYTOACI_ID with model_image_id=$AZUREML_IMAGE_ID..."
+        notebook_params=$( jq -n --arg imgid "$AZUREML_IMAGE_ID" '{ model_image_id: $imgid }' )
+        run_id=$(databricks jobs run-now --job-id $DATABRICKS_JOB_DEPLOYTOACI_ID --notebook-params "$notebook_params" | jq ".run_id")
+        echo "  Run ID: $run_id"
+        
+        run_state=$(databricks runs get --run-id $run_id | jq -r ".state.life_cycle_state")
+        echo "Run State (ID $run_id): $run_state"
+        while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
+        do
+          sleep 30
+          run_state=$(databricks runs get --run-id $run_id | jq -r ".state.life_cycle_state")
+          echo "Run State (ID $run_id): $run_state"
+        done
+        result_state=$(databricks runs get --run-id $run_id | jq -r ".state.result_state")
+        state_message=$(databricks runs get --run-id $run_id | jq -r ".state.state_message")
+        echo "Result State (ID $run_id): $result_state, Message: $state_message"
+        
+        if [ $result_state == "SUCCESS" ]
+        then
+          exit 0
+        else
+          exit 1
+        fi

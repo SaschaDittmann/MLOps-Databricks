@@ -78,12 +78,13 @@ jobs:
           "init_scripts_safe_mode": false
         }
         EOM`
-        DATABRICKS_CLUSTER_ID=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
+        cluster_id=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
         sleep 10
+        echo "::set-env DATABRICKS_CLUSTER_ID=$cluster_id"
         fi
     - name: Start Cluster
       run: |
-        DATABRICKS_CLUSTER_STATE=$(databricks clusters get --cluster-id $DATABRICKS_CLUSTER_ID | jq -r ".state")
+        DATABRICKS_CLUSTER_STATE=$(databricks clusters get --cluster-id "$DATABRICKS_CLUSTER_ID" | jq -r ".state")
         if [ $DATABRICKS_CLUSTER_STATE == "TERMINATED" ]
         then
           echo "Starting Databricks Cluster..."

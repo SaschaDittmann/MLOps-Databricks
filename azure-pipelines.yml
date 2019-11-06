@@ -20,259 +20,589 @@ variables:
   databricks.job.train.name: Wine Quality (Train)
   databricks.job.train.id:
   databricks.job.buildimage.name: Wine Quality (Build Container Image)
+  azureml.image.id: 
+  databricks.job.deploytoaci.name: Wine Quality (Deploy To ACI)
+  databricks.job.deploytoaci.id:
+  databricks.job.deploytoaks.name: Wine Quality (Deploy To AKS)
+  databricks.job.deploytoaks.id:
 
-pool:
-  vmImage: 'ubuntu-latest'
-
-steps:
-- task: UsePythonVersion@0
-  displayName: 'Use Python 3.6'
-  inputs:
-    versionSpec: '3.6'
-    addToPath: true
-    architecture: 'x64'
-- task: Bash@3
-  displayName: 'Install Databricks CLI'
-  inputs:
-    targetType: 'inline'
-    script: 'pip install -U databricks-cli'
-- task: Bash@3
-  displayName: 'Configure Databricks CLI'
-  inputs:
-    targetType: 'inline'
-    script: |
-      set -x
-      
-      # We need to write the pipe the conf into databricks configure --token since
-      # that command only takes inputs from stdin. 
-      conf=`cat << EOM
-      $(databricks.host)
-      $(databricks.token)
-      EOM`
-      
-      # For password auth there are three lines expected
-      # hostname, username, password
-      echo "$conf" | databricks configure --token
-- task: Bash@3
-  displayName: 'Create Notebook Path'
-  inputs:
-    targetType: 'inline'
-    script: 'databricks workspace mkdirs "$(databricks.notebook.path)"'
-- task: Bash@3
-  displayName: 'Import Notebooks'
-  inputs:
-    targetType: 'inline'
-    script: 'databricks workspace import_dir --overwrite notebooks "$(databricks.notebook.path)"'
-- task: Bash@3
-  displayName: 'Create / Get Cluster'
-  inputs:
-    targetType: 'inline'
-    script: |
-      set -x
-      
-      cluster_id=$(databricks clusters list | grep "$(databricks.cluster.name)" | awk '{print $1}')
-      
-      if [ -z "$cluster_id" ]
-      then
-      JSON=`cat << EOM
-      {
-        "cluster_name": "$(databricks.cluster.name)",
-        "spark_version": "$(databricks.cluster.spark_version)",
-        "spark_conf": {
-          "spark.databricks.delta.preview.enabled": "true"
-        },
-        "node_type_id": "$(databricks.cluster.node_type_id)",
-        "driver_node_type_id": "$(databricks.cluster.driver_node_type_id)",
-        "spark_env_vars": {
-          "PYSPARK_PYTHON": "/databricks/python3/bin/python3"
-        },
-        "autotermination_minutes": $(databricks.cluster.autotermination_minutes),
-        "enable_elastic_disk": true,
-        "autoscale": {
-          "min_workers": $(databricks.cluster.workers.min),
-          "max_workers": $(databricks.cluster.workers.max)
-        },
-        "init_scripts_safe_mode": false
-      }
-      EOM`
-      
-      cluster_id=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
-      sleep 10
-      fi
-      
-      echo "##vso[task.setvariable variable=databricks.cluster.id;]$cluster_id"
-- task: Bash@3
-  displayName: 'Start Cluster'
-  inputs:
-    targetType: 'inline'
-    script: |
-      cluster_state=$(databricks clusters get --cluster-id "$(databricks.cluster.id)" | jq -r ".state")
-      if [ $cluster_state == "TERMINATED" ]
-      then
-        echo "Starting Databricks Cluster..."
-        databricks clusters start --cluster-id "$(databricks.cluster.id)"
-        sleep 30
-        cluster_state=$(databricks clusters get --cluster-id "$(databricks.cluster.id)" | jq -r ".state")
-        echo "Cluster State: $cluster_state"
-      fi
-      
-      while [ $cluster_state == "PENDING" ]
-      do
-        sleep 30
-        cluster_state=$(databricks clusters get --cluster-id "$(databricks.cluster.id)" | jq -r ".state")
-        echo "Cluster State: $cluster_state"
-      done
-      
-      if [ $cluster_state == "RUNNING" ]
-      then
-        exit 0
-      else
-        exit 1
-      fi
-- task: Bash@3
-  displayName: 'Create / Get Training Job'
-  inputs:
-    targetType: 'inline'
-    script: |
-      set -x
-      
-      job_id=$(databricks jobs list | grep "$(databricks.job.train.name)" | awk '{print $1}')
-      
-      if [ -z "$job_id" ]
-      then
-      JSON=`cat << EOM
-      {
-        "notebook_task": {
-          "notebook_path": "$(databricks.notebook.path)/train",
-          "base_parameters": {
-            "alpha": "0.5",
-            "l1_ratio": "0.5"
+stages:
+- stage: Build
+  displayName: 'Train, Evaluate & Register Model'
+  jobs:
+  - job: Train
+    displayName: 'Train, Evaluate & Register Model'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: UsePythonVersion@0
+      displayName: 'Use Python 3.6'
+      inputs:
+        versionSpec: '3.6'
+        addToPath: true
+        architecture: 'x64'
+    - task: Bash@3
+      displayName: 'Install Databricks CLI'
+      inputs:
+        targetType: 'inline'
+        script: 'pip install -U databricks-cli'
+    - task: Bash@3
+      displayName: 'Configure Databricks CLI'
+      inputs:
+        targetType: 'inline'
+        script: |
+          set -x
+          
+          # We need to write the pipe the conf into databricks configure --token since
+          # that command only takes inputs from stdin. 
+          conf=`cat << EOM
+          $(databricks.host)
+          $(databricks.token)
+          EOM`
+          
+          # For password auth there are three lines expected
+          # hostname, username, password
+          echo "$conf" | databricks configure --token
+    - task: Bash@3
+      displayName: 'Create Notebook Path'
+      inputs:
+        targetType: 'inline'
+        script: 'databricks workspace mkdirs "$(databricks.notebook.path)"'
+    - task: Bash@3
+      displayName: 'Import Notebooks'
+      inputs:
+        targetType: 'inline'
+        script: 'databricks workspace import_dir --overwrite notebooks "$(databricks.notebook.path)"'
+    - task: Bash@3
+      displayName: 'Create / Get Cluster'
+      inputs:
+        targetType: 'inline'
+        script: |
+          set -x
+          
+          cluster_id=$(databricks clusters list | grep "$(databricks.cluster.name)" | awk '{print $1}')
+          
+          if [ -z "$cluster_id" ]
+          then
+          JSON=`cat << EOM
+          {
+            "cluster_name": "$(databricks.cluster.name)",
+            "spark_version": "$(databricks.cluster.spark_version)",
+            "spark_conf": {
+              "spark.databricks.delta.preview.enabled": "true"
+            },
+            "node_type_id": "$(databricks.cluster.node_type_id)",
+            "driver_node_type_id": "$(databricks.cluster.driver_node_type_id)",
+            "spark_env_vars": {
+              "PYSPARK_PYTHON": "/databricks/python3/bin/python3"
+            },
+            "autotermination_minutes": $(databricks.cluster.autotermination_minutes),
+            "enable_elastic_disk": true,
+            "autoscale": {
+              "min_workers": $(databricks.cluster.workers.min),
+              "max_workers": $(databricks.cluster.workers.max)
+            },
+            "init_scripts_safe_mode": false
           }
-        },
-        "existing_cluster_id": "$(databricks.cluster.id)",
-        "name": "$(databricks.job.train.name)",
-        "max_concurrent_runs": 3,
-        "timeout_seconds": 86400,
-        "libraries": [],
-        "email_notifications": {}
-      }
-      EOM`
-      
-      job_id=$(databricks jobs create --json "$JSON" | jq ".job_id")
-      fi
-      
-      echo "##vso[task.setvariable variable=databricks.job.train.id;]$job_id"
-- task: Bash@3
-  displayName: 'Run Training Jobs'
-  inputs:
-    targetType: 'inline'
-    script: |
-      echo "Running job with ID $(databricks.job.train.id) with alpha=0.1, l1_ratio=0.1..."
-      run_id1=$(databricks jobs run-now --job-id $(databricks.job.train.id) --notebook-params '{ "alpha": "0.1", "l1_ratio": "0.1" }' | jq ".run_id")
-      echo "  Run ID: $run_id1"
-      
-      echo "Running job with ID $(databricks.job.train.id) with alpha=0.3, l1_ratio=0.3..."
-      run_id2=$(databricks jobs run-now --job-id $(databricks.job.train.id) --notebook-params '{ "alpha": "0.3", "l1_ratio": "0.3" }' | jq ".run_id")
-      echo "  Run ID: $run_id2"
-      
-      echo "Running job with ID $(databricks.job.train.id) with alpha=0.5, l1_ratio=0.5..."
-      run_id3=$(databricks jobs run-now --job-id $(databricks.job.train.id) --notebook-params '{ "alpha": "0.5", "l1_ratio": "0.5" }' | jq ".run_id")
-      echo "  Run ID: $run_id3"
-      
-      run_state=$(databricks runs get --run-id $run_id1 | jq -r ".state.life_cycle_state")
-      echo "Run State (ID $run_id1): $run_state"
-      while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
-      do
-        sleep 30
-        run_state=$(databricks runs get --run-id $run_id1 | jq -r ".state.life_cycle_state")
-        echo "Run State (ID $run_id1): $run_state"
-      done
-      result_state1=$(databricks runs get --run-id $run_id1 | jq -r ".state.result_state")
-      state_message1=$(databricks runs get --run-id $run_id1 | jq -r ".state.state_message")
-      echo "Result State (ID $run_id1): $result_state1, Message: $state_message1"
-      
-      run_state=$(databricks runs get --run-id $run_id2 | jq -r ".state.life_cycle_state")
-      echo "Run State (ID $run_id2): $run_state"
-      while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
-      do
-        sleep 30
-        run_state=$(databricks runs get --run-id $run_id2 | jq -r ".state.life_cycle_state")
-        echo "Run State (ID $run_id2): $run_state"
-      done
-      result_state2=$(databricks runs get --run-id $run_id2 | jq -r ".state.result_state")
-      state_message2=$(databricks runs get --run-id $run_id2 | jq -r ".state.state_message")
-      echo "Result State (ID $run_id2): $result_state2, Message: $state_message2"
-      
-      run_state=$(databricks runs get --run-id $run_id3 | jq -r ".state.life_cycle_state")
-      echo "Run State (ID $run_id3): $run_state"
-      while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
-      do
-        sleep 30
-        run_state=$(databricks runs get --run-id $run_id3 | jq -r ".state.life_cycle_state")
-        echo "Run State (ID $run_id3): $run_state"
-      done
-      result_state3=$(databricks runs get --run-id $run_id3 | jq -r ".state.result_state")
-      state_message3=$(databricks runs get --run-id $run_id3 | jq -r ".state.state_message")
-      echo "Result State (ID $run_id3): $result_state3, Message: $state_message3"
-      
-      if [ $result_state1 == "SUCCESS" -a $result_state2 == "SUCCESS" -a $result_state3 == "SUCCESS" ]
-      then
-        exit 0
-      else
-        exit 1
-      fi
-- task: Bash@3
-  displayName: 'Build Container Image'
-  inputs:
-    targetType: 'inline'
-    script: |
-      JSON=`cat << EOM
-      {
-        "notebook_task": {
-          "notebook_path": "$(databricks.notebook.path)/serving_build_container_image"
-        },
-        "existing_cluster_id": "$(databricks.cluster.id)",
-        "run_name": "$(databricks.job.buildimage.name)",
-        "max_concurrent_runs": 1,
-        "timeout_seconds": 86400,
-        "libraries": [],
-        "email_notifications": {}
-      }
-      EOM`
-      
-      echo "Building Container Image ..."
-      run_id=$(databricks runs submit --json "$JSON" | jq ".run_id")
-      echo "  Run ID: $run_id"
-      
-      run_state=$(databricks runs get --run-id $run_id | jq -r ".state.life_cycle_state")
-      echo "Run State (ID $run_id): $run_state"
-      while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
-      do
-        sleep 30
-        run_state=$(databricks runs get --run-id $run_id | jq -r ".state.life_cycle_state")
-        echo "Run State (ID $run_id): $run_state"
-      done
-      result_state=$(databricks runs get --run-id $run_id | jq -r ".state.result_state")
-      state_message=$(databricks runs get --run-id $run_id | jq -r ".state.state_message")
-      echo "Result State (ID $run_id): $result_state, Message: $state_message"
-      
-      if [ $result_state == "SUCCESS" ]
-      then
-        mkdir -p metadata
-        databricks runs get-output --run-id $run_id | jq -r .notebook_output.result | tee metadata/image.json
-        exit 0
-      else
-        exit 1
-      fi
-- task: CopyFiles@2
-  displayName: 'Copy Files to Artifact Staging Directory'
-  inputs:
-    SourceFolder: '$(Build.SourcesDirectory)'
-    Contents: '**/metadata/*'
-    TargetFolder: '$(Build.ArtifactStagingDirectory)'
-- task: PublishBuildArtifacts@1
-  displayName: 'Publish Artifact: drop'
-  inputs:
-    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-    ArtifactName: 'drop'
-    publishLocation: 'Container'
+          EOM`
+          
+          cluster_id=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
+          sleep 10
+          fi
+          
+          echo "##vso[task.setvariable variable=databricks.cluster.id;]$cluster_id"
+    - task: Bash@3
+      displayName: 'Start Cluster'
+      inputs:
+        targetType: 'inline'
+        script: |
+          cluster_state=$(databricks clusters get --cluster-id "$(databricks.cluster.id)" | jq -r ".state")
+          if [ $cluster_state == "TERMINATED" ]
+          then
+            echo "Starting Databricks Cluster..."
+            databricks clusters start --cluster-id "$(databricks.cluster.id)"
+            sleep 30
+            cluster_state=$(databricks clusters get --cluster-id "$(databricks.cluster.id)" | jq -r ".state")
+            echo "Cluster State: $cluster_state"
+          fi
+          
+          while [ $cluster_state == "PENDING" ]
+          do
+            sleep 30
+            cluster_state=$(databricks clusters get --cluster-id "$(databricks.cluster.id)" | jq -r ".state")
+            echo "Cluster State: $cluster_state"
+          done
+          
+          if [ $cluster_state == "RUNNING" ]
+          then
+            exit 0
+          else
+            exit 1
+          fi
+    - task: Bash@3
+      displayName: 'Create / Get Training Job'
+      inputs:
+        targetType: 'inline'
+        script: |
+          set -x
+          
+          job_id=$(databricks jobs list | grep "$(databricks.job.train.name)" | awk '{print $1}')
+          
+          if [ -z "$job_id" ]
+          then
+          JSON=`cat << EOM
+          {
+            "notebook_task": {
+              "notebook_path": "$(databricks.notebook.path)/train",
+              "base_parameters": {
+                "alpha": "0.5",
+                "l1_ratio": "0.5"
+              }
+            },
+            "existing_cluster_id": "$(databricks.cluster.id)",
+            "name": "$(databricks.job.train.name)",
+            "max_concurrent_runs": 3,
+            "timeout_seconds": 86400,
+            "libraries": [],
+            "email_notifications": {}
+          }
+          EOM`
+          
+          job_id=$(databricks jobs create --json "$JSON" | jq ".job_id")
+          fi
+          
+          echo "##vso[task.setvariable variable=databricks.job.train.id;]$job_id"
+    - task: Bash@3
+      displayName: 'Run Training Jobs'
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo "Running job with ID $(databricks.job.train.id) with alpha=0.1, l1_ratio=0.1..."
+          run_id1=$(databricks jobs run-now --job-id $(databricks.job.train.id) --notebook-params '{ "alpha": "0.1", "l1_ratio": "0.1" }' | jq ".run_id")
+          echo "  Run ID: $run_id1"
+          
+          echo "Running job with ID $(databricks.job.train.id) with alpha=0.3, l1_ratio=0.3..."
+          run_id2=$(databricks jobs run-now --job-id $(databricks.job.train.id) --notebook-params '{ "alpha": "0.3", "l1_ratio": "0.3" }' | jq ".run_id")
+          echo "  Run ID: $run_id2"
+          
+          echo "Running job with ID $(databricks.job.train.id) with alpha=0.5, l1_ratio=0.5..."
+          run_id3=$(databricks jobs run-now --job-id $(databricks.job.train.id) --notebook-params '{ "alpha": "0.5", "l1_ratio": "0.5" }' | jq ".run_id")
+          echo "  Run ID: $run_id3"
+          
+          run_state=$(databricks runs get --run-id $run_id1 | jq -r ".state.life_cycle_state")
+          echo "Run State (ID $run_id1): $run_state"
+          while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
+          do
+            sleep 30
+            run_state=$(databricks runs get --run-id $run_id1 | jq -r ".state.life_cycle_state")
+            echo "Run State (ID $run_id1): $run_state"
+          done
+          result_state1=$(databricks runs get --run-id $run_id1 | jq -r ".state.result_state")
+          state_message1=$(databricks runs get --run-id $run_id1 | jq -r ".state.state_message")
+          echo "Result State (ID $run_id1): $result_state1, Message: $state_message1"
+          
+          run_state=$(databricks runs get --run-id $run_id2 | jq -r ".state.life_cycle_state")
+          echo "Run State (ID $run_id2): $run_state"
+          while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
+          do
+            sleep 30
+            run_state=$(databricks runs get --run-id $run_id2 | jq -r ".state.life_cycle_state")
+            echo "Run State (ID $run_id2): $run_state"
+          done
+          result_state2=$(databricks runs get --run-id $run_id2 | jq -r ".state.result_state")
+          state_message2=$(databricks runs get --run-id $run_id2 | jq -r ".state.state_message")
+          echo "Result State (ID $run_id2): $result_state2, Message: $state_message2"
+          
+          run_state=$(databricks runs get --run-id $run_id3 | jq -r ".state.life_cycle_state")
+          echo "Run State (ID $run_id3): $run_state"
+          while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
+          do
+            sleep 30
+            run_state=$(databricks runs get --run-id $run_id3 | jq -r ".state.life_cycle_state")
+            echo "Run State (ID $run_id3): $run_state"
+          done
+          result_state3=$(databricks runs get --run-id $run_id3 | jq -r ".state.result_state")
+          state_message3=$(databricks runs get --run-id $run_id3 | jq -r ".state.state_message")
+          echo "Result State (ID $run_id3): $result_state3, Message: $state_message3"
+          
+          if [ $result_state1 == "SUCCESS" -a $result_state2 == "SUCCESS" -a $result_state3 == "SUCCESS" ]
+          then
+            exit 0
+          else
+            exit 1
+          fi
+    - task: Bash@3
+      displayName: 'Build Container Image'
+      inputs:
+        targetType: 'inline'
+        script: |
+          JSON=`cat << EOM
+          {
+            "notebook_task": {
+              "notebook_path": "$(databricks.notebook.path)/serving_build_container_image"
+            },
+            "existing_cluster_id": "$(databricks.cluster.id)",
+            "run_name": "$(databricks.job.buildimage.name)",
+            "max_concurrent_runs": 1,
+            "timeout_seconds": 86400,
+            "libraries": [],
+            "email_notifications": {}
+          }
+          EOM`
+          
+          echo "Building Container Image ..."
+          run_id=$(databricks runs submit --json "$JSON" | jq ".run_id")
+          echo "  Run ID: $run_id"
+          
+          run_state=$(databricks runs get --run-id $run_id | jq -r ".state.life_cycle_state")
+          echo "Run State (ID $run_id): $run_state"
+          while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
+          do
+            sleep 30
+            run_state=$(databricks runs get --run-id $run_id | jq -r ".state.life_cycle_state")
+            echo "Run State (ID $run_id): $run_state"
+          done
+          result_state=$(databricks runs get --run-id $run_id | jq -r ".state.result_state")
+          state_message=$(databricks runs get --run-id $run_id | jq -r ".state.state_message")
+          echo "Result State (ID $run_id): $result_state, Message: $state_message"
+          
+          if [ $result_state == "SUCCESS" ]
+          then
+            mkdir -p metadata
+            databricks runs get-output --run-id $run_id | jq -r .notebook_output.result | tee metadata/image.json
+            exit 0
+          else
+            exit 1
+          fi
+    - task: CopyFiles@2
+      displayName: 'Copy Files to Artifact Staging Directory'
+      inputs:
+        SourceFolder: '$(Build.SourcesDirectory)'
+        Contents: '**/metadata/*'
+        TargetFolder: '$(Build.ArtifactStagingDirectory)'
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Artifact: drop'
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'drop'
+        publishLocation: 'Container'
+- stage: Staging
+  displayName: 'Deploy to Staging'
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+    # track deployments on the environment
+  - deployment: DeployToACI
+    displayName: 'Deploy to Azure Container Instance'
+    pool:
+      vmImage: 'ubuntu-latest'
+    # creates an environment if it doesn’t exist
+    environment: 'wine-quality-staging'
+    strategy:
+      # default deployment strategy
+      runOnce:
+        deploy:
+          steps:
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Artifact: drop'
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'drop'
+              downloadPath: '$(System.ArtifactsDirectory)' 
+          - task: UsePythonVersion@0
+            displayName: 'Use Python 3.6'
+            inputs:
+              versionSpec: '3.6'
+              addToPath: true
+              architecture: 'x64'
+          - task: Bash@3
+            displayName: 'Install Databricks CLI'
+            inputs:
+              targetType: 'inline'
+              script: 'pip install -U databricks-cli'
+          - task: Bash@3
+            displayName: 'Configure Databricks CLI'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -x
+                
+                # We need to write the pipe the conf into databricks configure --token since
+                # that command only takes inputs from stdin. 
+                conf=`cat << EOM
+                $(databricks.host)
+                $(databricks.token)
+                EOM`
+                
+                # For password auth there are three lines expected
+                # hostname, username, password
+                echo "$conf" | databricks configure --token
+          - task: Bash@3
+            displayName: 'Create / Get Cluster'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -x
+                
+                cluster_id=$(databricks clusters list | grep "$(databricks.cluster.name)" | awk '{print $1}')
+                
+                if [ -z "$cluster_id" ]
+                then
+                JSON=`cat << EOM
+                {
+                  "cluster_name": "$(databricks.cluster.name)",
+                  "spark_version": "$(databricks.cluster.spark_version)",
+                  "spark_conf": {
+                    "spark.databricks.delta.preview.enabled": "true"
+                  },
+                  "node_type_id": "$(databricks.cluster.node_type_id)",
+                  "driver_node_type_id": "$(databricks.cluster.driver_node_type_id)",
+                  "spark_env_vars": {
+                    "PYSPARK_PYTHON": "/databricks/python3/bin/python3"
+                  },
+                  "autotermination_minutes": $(databricks.cluster.autotermination_minutes),
+                  "enable_elastic_disk": true,
+                  "autoscale": {
+                    "min_workers": $(databricks.cluster.workers.min),
+                    "max_workers": $(databricks.cluster.workers.max)
+                  },
+                  "init_scripts_safe_mode": false
+                }
+                EOM`
+                
+                cluster_id=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
+                sleep 10
+                fi
+                
+                echo "##vso[task.setvariable variable=databricks.cluster.id;]$cluster_id"
+          - task: Bash@3
+            displayName: 'Create / Get Deploy ACI Job'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -x
+                
+                job_id=$(databricks jobs list | grep "$(databricks.job.deploytoaci.name)" | awk '{print $1}')
+                
+                if [ -z "$job_id" ]
+                then
+                JSON=`cat << EOM
+                {
+                  "notebook_task": {
+                    "notebook_path": "$(databricks.notebook.path)/serving_deploy_to_aci",
+                    "base_parameters": {
+                      "model_image_id": ""
+                    }
+                  },
+                  "existing_cluster_id": "$(databricks.cluster.id)",
+                  "name": "$(databricks.job.deploytoaci.name)",
+                  "max_concurrent_runs": 1,
+                  "timeout_seconds": 86400,
+                  "libraries": [],
+                  "email_notifications": {}
+                }
+                EOM`
+                
+                job_id=$(databricks jobs create --json "$JSON" | jq ".job_id")
+                fi
+                
+                echo "##vso[task.setvariable variable=databricks.job.deploytoaci.id;]$job_id"
+          - task: Bash@3
+            displayName: 'Get Image ID'
+            inputs:
+              targetType: 'inline'
+              script: |
+                echo "Retrieving Image ID..."
+                model_image_id=$(cat image.json | jq -r ".model_image_id")
+                echo "  Image ID: $model_image_id"
+                
+                echo "##vso[task.setvariable variable=azureml.image.id;]$model_image_id"
+              workingDirectory: '$(System.ArtifactsDirectory)/drop/metadata'
+          - task: Bash@3
+            displayName: 'Deploy To ACI'
+            inputs:
+              targetType: 'inline'
+              script: |
+                echo "Running job with ID $(databricks.job.deploytoaci.id) with model_image_id=$(azureml.image.id)..."
+                run_id=$(databricks jobs run-now --job-id $(databricks.job.deploytoaci.id) --notebook-params '{ "model_image_id": "$(azureml.image.id)" }' | jq ".run_id")
+                echo "  Run ID: $run_id"
+                
+                run_state=$(databricks runs get --run-id $run_id | jq -r ".state.life_cycle_state")
+                echo "Run State (ID $run_id): $run_state"
+                while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
+                do
+                  sleep 30
+                  run_state=$(databricks runs get --run-id $run_id | jq -r ".state.life_cycle_state")
+                  echo "Run State (ID $run_id): $run_state"
+                done
+                result_state=$(databricks runs get --run-id $run_id | jq -r ".state.result_state")
+                state_message=$(databricks runs get --run-id $run_id | jq -r ".state.state_message")
+                echo "Result State (ID $run_id): $result_state, Message: $state_message"
+                
+                if [ $result_state == "SUCCESS" ]
+                then
+                  exit 0
+                else
+                  exit 1
+                fi
+- stage: Production
+  displayName: 'Deploy to Production'
+  dependsOn: Staging
+  condition: succeeded()
+  jobs:
+    # track deployments on the environment
+  - deployment: DeployToAKS
+    displayName: 'Deploy to Azure Kubernetes Service'
+    pool:
+      vmImage: 'ubuntu-latest'
+    # creates an environment if it doesn’t exist
+    environment: 'wine-quality-production'
+    strategy:
+      # default deployment strategy
+      runOnce:
+        deploy:
+          steps:
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Artifact: drop'
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'drop'
+              downloadPath: '$(System.ArtifactsDirectory)' 
+          - task: UsePythonVersion@0
+            displayName: 'Use Python 3.6'
+            inputs:
+              versionSpec: '3.6'
+              addToPath: true
+              architecture: 'x64'
+          - task: Bash@3
+            displayName: 'Install Databricks CLI'
+            inputs:
+              targetType: 'inline'
+              script: 'pip install -U databricks-cli'
+          - task: Bash@3
+            displayName: 'Configure Databricks CLI'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -x
+                
+                # We need to write the pipe the conf into databricks configure --token since
+                # that command only takes inputs from stdin. 
+                conf=`cat << EOM
+                $(databricks.host)
+                $(databricks.token)
+                EOM`
+                
+                # For password auth there are three lines expected
+                # hostname, username, password
+                echo "$conf" | databricks configure --token
+          - task: Bash@3
+            displayName: 'Create / Get Cluster'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -x
+                
+                cluster_id=$(databricks clusters list | grep "$(databricks.cluster.name)" | awk '{print $1}')
+                
+                if [ -z "$cluster_id" ]
+                then
+                JSON=`cat << EOM
+                {
+                  "cluster_name": "$(databricks.cluster.name)",
+                  "spark_version": "$(databricks.cluster.spark_version)",
+                  "spark_conf": {
+                    "spark.databricks.delta.preview.enabled": "true"
+                  },
+                  "node_type_id": "$(databricks.cluster.node_type_id)",
+                  "driver_node_type_id": "$(databricks.cluster.driver_node_type_id)",
+                  "spark_env_vars": {
+                    "PYSPARK_PYTHON": "/databricks/python3/bin/python3"
+                  },
+                  "autotermination_minutes": $(databricks.cluster.autotermination_minutes),
+                  "enable_elastic_disk": true,
+                  "autoscale": {
+                    "min_workers": $(databricks.cluster.workers.min),
+                    "max_workers": $(databricks.cluster.workers.max)
+                  },
+                  "init_scripts_safe_mode": false
+                }
+                EOM`
+                
+                cluster_id=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
+                sleep 10
+                fi
+                
+                echo "##vso[task.setvariable variable=databricks.cluster.id;]$cluster_id"
+          - task: Bash@3
+            displayName: 'Create / Get Deploy AKS Job'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -x
+                
+                job_id=$(databricks jobs list | grep "$(databricks.job.deploytoaks.name)" | awk '{print $1}')
+                
+                if [ -z "$job_id" ]
+                then
+                JSON=`cat << EOM
+                {
+                  "notebook_task": {
+                    "notebook_path": "$(databricks.notebook.path)/serving_deploy_to_aks",
+                    "base_parameters": {
+                      "model_image_id": ""
+                    }
+                  },
+                  "existing_cluster_id": "$(databricks.cluster.id)",
+                  "name": "$(databricks.job.deploytoaks.name)",
+                  "max_concurrent_runs": 1,
+                  "timeout_seconds": 86400,
+                  "libraries": [],
+                  "email_notifications": {}
+                }
+                EOM`
+                
+                job_id=$(databricks jobs create --json "$JSON" | jq ".job_id")
+                fi
+                
+                echo "##vso[task.setvariable variable=databricks.job.deploytoaks.id;]$job_id"
+          - task: Bash@3
+            displayName: 'Get Image ID'
+            inputs:
+              targetType: 'inline'
+              script: |
+                echo "Retrieving Image ID..."
+                model_image_id=$(cat image.json | jq -r ".model_image_id")
+                echo "  Image ID: $model_image_id"
+                
+                echo "##vso[task.setvariable variable=azureml.image.id;]$model_image_id"
+              workingDirectory: '$(System.ArtifactsDirectory)/drop/metadata'
+          - task: Bash@3
+            displayName: 'Deploy To AKS'
+            inputs:
+              targetType: 'inline'
+              script: |
+                echo "Running job with ID $(databricks.job.deploytoaks.id) with model_id=$(azureml.image.id)..."
+                run_id=$(databricks jobs run-now --job-id $(databricks.job.deploytoaks.id) --notebook-params '{ "model_image_id": "$(azureml.image.id)" }' | jq ".run_id")
+                echo "  Run ID: $run_id"
+                
+                run_state=$(databricks runs get --run-id $run_id | jq -r ".state.life_cycle_state")
+                echo "Run State (ID $run_id): $run_state"
+                while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
+                do
+                  sleep 30
+                  run_state=$(databricks runs get --run-id $run_id | jq -r ".state.life_cycle_state")
+                  echo "Run State (ID $run_id): $run_state"
+                done
+                result_state=$(databricks runs get --run-id $run_id | jq -r ".state.result_state")
+                state_message=$(databricks runs get --run-id $run_id | jq -r ".state.state_message")
+                echo "Result State (ID $run_id): $result_state, Message: $state_message"
+                
+                if [ $result_state == "SUCCESS" ]
+                then
+                  exit 0
+                else
+                  exit 1
+                fi

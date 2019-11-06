@@ -8,6 +8,9 @@ on:
 jobs:
   train:
     runs-on: ubuntu-latest
+    env:
+      DATABRICKS_HOST: https://westeurope.azuredatabricks.net
+      DATABRICKS_NOTEBOOK_PATH: /Shared/MLFlow
     steps:
     - uses: actions/checkout@v1
     - name: Set up Python 3.6
@@ -18,3 +21,21 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -U databricks-cli
+    - name: Configure Databricks CLI
+      run: |
+        set -x
+        
+        # We need to write the pipe the conf into databricks configure --token since
+        # that command only takes inputs from stdin. 
+        conf=`cat << EOM
+        $(!DATABRICKS_HOST)
+        $(!DATABRICKS_TOKEN)
+        EOM`
+        
+        # For password auth there are three lines expected
+        # hostname, username, password
+        echo "$conf" | databricks configure --token
+    - name: Create Notebook Path
+      run: 'databricks workspace mkdirs "$DATABRICKS_NOTEBOOK_PATH"'
+    - name: Import Notebooks
+      run: 'databricks workspace import_dir --overwrite notebooks "$DATABRICKS_NOTEBOOK_PATH"'

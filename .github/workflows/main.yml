@@ -1,9 +1,9 @@
 name: Wine Quality Machine Learning Pipeline
 
-on: [push]
-#  push:
-#    branches:    
-#      - master
+on:
+  push:
+    branches:    
+      - master
 
 jobs:
   train:

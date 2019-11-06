@@ -354,7 +354,8 @@ jobs:
     - name: Deploy To ACI
       run: |
         echo "Running job with ID $DATABRICKS_JOB_DEPLOYTOACI_ID with model_image_id=$AZUREML_IMAGE_ID..."
-        run_id=$(databricks jobs run-now --job-id $DATABRICKS_JOB_DEPLOYTOACI_ID --notebook-params '{ "model_image_id": "$AZUREML_IMAGE_ID" }' | jq ".run_id")
+        notebook_params=$( jq -n --arg imgid "$AZUREML_IMAGE_ID" '{ "model_image_id": "$imgid" }' )
+        run_id=$(databricks jobs run-now --job-id $DATABRICKS_JOB_DEPLOYTOACI_ID --notebook-params "$notebook_params" | jq ".run_id")
         echo "  Run ID: $run_id"
         
         run_state=$(databricks runs get --run-id $run_id | jq -r ".state.life_cycle_state")

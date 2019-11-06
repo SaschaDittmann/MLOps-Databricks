@@ -80,8 +80,9 @@ jobs:
         EOM`
         DATABRICKS_CLUSTER_ID=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
         sleep 10
-        echo "::set-env name=DATABRICKS_CLUSTER_ID::$DATABRICKS_CLUSTER_ID"
         fi
+        
+        echo "::set-env name=DATABRICKS_CLUSTER_ID::$DATABRICKS_CLUSTER_ID"
     - name: Start Cluster
       run: |
         DATABRICKS_CLUSTER_STATE=$(databricks clusters get --cluster-id "$DATABRICKS_CLUSTER_ID" | jq -r ".state")

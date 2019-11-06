@@ -78,9 +78,9 @@ jobs:
           "init_scripts_safe_mode": false
         }
         EOM`
-        cluster_id=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
+        DATABRICKS_CLUSTER_ID=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
         sleep 10
-        echo "::set-env name=DATABRICKS_CLUSTER_ID::$cluster_id"
+        echo "::set-env name=DATABRICKS_CLUSTER_ID::$DATABRICKS_CLUSTER_ID"
         fi
     - name: Start Cluster
       run: |

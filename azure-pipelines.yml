@@ -1,0 +1,278 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- master
+
+variables:
+  databricks.host: https://westeurope.azuredatabricks.net
+  databricks.notebook.path: /Shared/MLFlow
+  databricks.cluster.name: ML
+  databricks.cluster.id: 
+  databricks.cluster.spark_version: 5.5.x-cpu-ml-scala2.11
+  databricks.cluster.node_type_id: Standard_DS3_v2
+  databricks.cluster.driver_node_type_id: Standard_DS3_v2
+  databricks.cluster.autotermination_minutes: 15
+  databricks.cluster.workers.min: 1
+  databricks.cluster.workers.max: 4
+  databricks.job.train.name: Wine Quality (Train)
+  databricks.job.train.id:
+  databricks.job.buildimage.name: Wine Quality (Build Container Image)
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+- task: UsePythonVersion@0
+  displayName: 'Use Python 3.6'
+  inputs:
+    versionSpec: '3.6'
+    addToPath: true
+    architecture: 'x64'
+- task: Bash@3
+  displayName: 'Install Databricks CLI'
+  inputs:
+    targetType: 'inline'
+    script: 'pip install -U databricks-cli'
+- task: Bash@3
+  displayName: 'Configure Databricks CLI'
+  inputs:
+    targetType: 'inline'
+    script: |
+      set -x
+      
+      # We need to write the pipe the conf into databricks configure --token since
+      # that command only takes inputs from stdin. 
+      conf=`cat << EOM
+      $(databricks.host)
+      $(databricks.token)
+      EOM`
+      
+      # For password auth there are three lines expected
+      # hostname, username, password
+      echo "$conf" | databricks configure --token
+- task: Bash@3
+  displayName: 'Create Notebook Path'
+  inputs:
+    targetType: 'inline'
+    script: 'databricks workspace mkdirs "$(databricks.notebook.path)"'
+- task: Bash@3
+  displayName: 'Import Notebooks'
+  inputs:
+    targetType: 'inline'
+    script: 'databricks workspace import_dir --overwrite notebooks "$(databricks.notebook.path)"'
+- task: Bash@3
+  displayName: 'Create / Get Cluster'
+  inputs:
+    targetType: 'inline'
+    script: |
+      set -x
+      
+      cluster_id=$(databricks clusters list | grep "$(databricks.cluster.name)" | awk '{print $1}')
+      
+      if [ -z "$cluster_id" ]
+      then
+      JSON=`cat << EOM
+      {
+        "cluster_name": "$(databricks.cluster.name)",
+        "spark_version": "$(databricks.cluster.spark_version)",
+        "spark_conf": {
+          "spark.databricks.delta.preview.enabled": "true"
+        },
+        "node_type_id": "$(databricks.cluster.node_type_id)",
+        "driver_node_type_id": "$(databricks.cluster.driver_node_type_id)",
+        "spark_env_vars": {
+          "PYSPARK_PYTHON": "/databricks/python3/bin/python3"
+        },
+        "autotermination_minutes": $(databricks.cluster.autotermination_minutes),
+        "enable_elastic_disk": true,
+        "autoscale": {
+          "min_workers": $(databricks.cluster.workers.min),
+          "max_workers": $(databricks.cluster.workers.max)
+        },
+        "init_scripts_safe_mode": false
+      }
+      EOM`
+      
+      cluster_id=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
+      sleep 10
+      fi
+      
+      echo "##vso[task.setvariable variable=databricks.cluster.id;]$cluster_id"
+- task: Bash@3
+  displayName: 'Start Cluster'
+  inputs:
+    targetType: 'inline'
+    script: |
+      cluster_state=$(databricks clusters get --cluster-id "$(databricks.cluster.id)" | jq -r ".state")
+      if [ $cluster_state == "TERMINATED" ]
+      then
+        echo "Starting Databricks Cluster..."
+        databricks clusters start --cluster-id "$(databricks.cluster.id)"
+        sleep 30
+        cluster_state=$(databricks clusters get --cluster-id "$(databricks.cluster.id)" | jq -r ".state")
+        echo "Cluster State: $cluster_state"
+      fi
+      
+      while [ $cluster_state == "PENDING" ]
+      do
+        sleep 30
+        cluster_state=$(databricks clusters get --cluster-id "$(databricks.cluster.id)" | jq -r ".state")
+        echo "Cluster State: $cluster_state"
+      done
+      
+      if [ $cluster_state == "RUNNING" ]
+      then
+        exit 0
+      else
+        exit 1
+      fi
+- task: Bash@3
+  displayName: 'Create / Get Training Job'
+  inputs:
+    targetType: 'inline'
+    script: |
+      set -x
+      
+      job_id=$(databricks jobs list | grep "$(databricks.job.train.name)" | awk '{print $1}')
+      
+      if [ -z "$job_id" ]
+      then
+      JSON=`cat << EOM
+      {
+        "notebook_task": {
+          "notebook_path": "$(databricks.notebook.path)/train",
+          "base_parameters": {
+            "alpha": "0.5",
+            "l1_ratio": "0.5"
+          }
+        },
+        "existing_cluster_id": "$(databricks.cluster.id)",
+        "name": "$(databricks.job.train.name)",
+        "max_concurrent_runs": 3,
+        "timeout_seconds": 86400,
+        "libraries": [],
+        "email_notifications": {}
+      }
+      EOM`
+      
+      job_id=$(databricks jobs create --json "$JSON" | jq ".job_id")
+      fi
+      
+      echo "##vso[task.setvariable variable=databricks.job.train.id;]$job_id"
+- task: Bash@3
+  displayName: 'Run Training Jobs'
+  inputs:
+    targetType: 'inline'
+    script: |
+      echo "Running job with ID $(databricks.job.train.id) with alpha=0.1, l1_ratio=0.1..."
+      run_id1=$(databricks jobs run-now --job-id $(databricks.job.train.id) --notebook-params '{ "alpha": "0.1", "l1_ratio": "0.1" }' | jq ".run_id")
+      echo "  Run ID: $run_id1"
+      
+      echo "Running job with ID $(databricks.job.train.id) with alpha=0.3, l1_ratio=0.3..."
+      run_id2=$(databricks jobs run-now --job-id $(databricks.job.train.id) --notebook-params '{ "alpha": "0.3", "l1_ratio": "0.3" }' | jq ".run_id")
+      echo "  Run ID: $run_id2"
+      
+      echo "Running job with ID $(databricks.job.train.id) with alpha=0.5, l1_ratio=0.5..."
+      run_id3=$(databricks jobs run-now --job-id $(databricks.job.train.id) --notebook-params '{ "alpha": "0.5", "l1_ratio": "0.5" }' | jq ".run_id")
+      echo "  Run ID: $run_id3"
+      
+      run_state=$(databricks runs get --run-id $run_id1 | jq -r ".state.life_cycle_state")
+      echo "Run State (ID $run_id1): $run_state"
+      while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
+      do
+        sleep 30
+        run_state=$(databricks runs get --run-id $run_id1 | jq -r ".state.life_cycle_state")
+        echo "Run State (ID $run_id1): $run_state"
+      done
+      result_state1=$(databricks runs get --run-id $run_id1 | jq -r ".state.result_state")
+      state_message1=$(databricks runs get --run-id $run_id1 | jq -r ".state.state_message")
+      echo "Result State (ID $run_id1): $result_state1, Message: $state_message1"
+      
+      run_state=$(databricks runs get --run-id $run_id2 | jq -r ".state.life_cycle_state")
+      echo "Run State (ID $run_id2): $run_state"
+      while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
+      do
+        sleep 30
+        run_state=$(databricks runs get --run-id $run_id2 | jq -r ".state.life_cycle_state")
+        echo "Run State (ID $run_id2): $run_state"
+      done
+      result_state2=$(databricks runs get --run-id $run_id2 | jq -r ".state.result_state")
+      state_message2=$(databricks runs get --run-id $run_id2 | jq -r ".state.state_message")
+      echo "Result State (ID $run_id2): $result_state2, Message: $state_message2"
+      
+      run_state=$(databricks runs get --run-id $run_id3 | jq -r ".state.life_cycle_state")
+      echo "Run State (ID $run_id3): $run_state"
+      while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
+      do
+        sleep 30
+        run_state=$(databricks runs get --run-id $run_id3 | jq -r ".state.life_cycle_state")
+        echo "Run State (ID $run_id3): $run_state"
+      done
+      result_state3=$(databricks runs get --run-id $run_id3 | jq -r ".state.result_state")
+      state_message3=$(databricks runs get --run-id $run_id3 | jq -r ".state.state_message")
+      echo "Result State (ID $run_id3): $result_state3, Message: $state_message3"
+      
+      if [ $result_state1 == "SUCCESS" -a $result_state2 == "SUCCESS" -a $result_state3 == "SUCCESS" ]
+      then
+        exit 0
+      else
+        exit 1
+      fi
+- task: Bash@3
+  displayName: 'Build Container Image'
+  inputs:
+    targetType: 'inline'
+    script: |
+      JSON=`cat << EOM
+      {
+        "notebook_task": {
+          "notebook_path": "$(databricks.notebook.path)/serving_build_container_image"
+        },
+        "existing_cluster_id": "$(databricks.cluster.id)",
+        "run_name": "$(databricks.job.buildimage.name)",
+        "max_concurrent_runs": 1,
+        "timeout_seconds": 86400,
+        "libraries": [],
+        "email_notifications": {}
+      }
+      EOM`
+      
+      echo "Building Container Image ..."
+      run_id=$(databricks runs submit --json "$JSON" | jq ".run_id")
+      echo "  Run ID: $run_id"
+      
+      run_state=$(databricks runs get --run-id $run_id | jq -r ".state.life_cycle_state")
+      echo "Run State (ID $run_id): $run_state"
+      while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
+      do
+        sleep 30
+        run_state=$(databricks runs get --run-id $run_id | jq -r ".state.life_cycle_state")
+        echo "Run State (ID $run_id): $run_state"
+      done
+      result_state=$(databricks runs get --run-id $run_id | jq -r ".state.result_state")
+      state_message=$(databricks runs get --run-id $run_id | jq -r ".state.state_message")
+      echo "Result State (ID $run_id): $result_state, Message: $state_message"
+      
+      if [ $result_state == "SUCCESS" ]
+      then
+        mkdir -p metadata
+        databricks runs get-output --run-id $run_id | jq -r .notebook_output.result | tee metadata/image.json
+        exit 0
+      else
+        exit 1
+      fi
+- task: CopyFiles@2
+  displayName: 'Copy Files to Artifact Staging Directory'
+  inputs:
+    SourceFolder: '$(Build.SourcesDirectory)'
+    Contents: '**/metadata/*'
+    TargetFolder: '$(Build.ArtifactStagingDirectory)'
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Artifact: drop'
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+    ArtifactName: 'drop'
+    publishLocation: 'Container'

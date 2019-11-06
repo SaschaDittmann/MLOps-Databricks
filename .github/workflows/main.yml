@@ -55,7 +55,7 @@ jobs:
         
         DATABRICKS_CLUSTER_ID=$(databricks clusters list | grep "$DATABRICKS_CLUSTER_NAME" | awk '{print $1}')
         
-        if [ -z "$cluster_id" ]
+        if [ -z "$DATABRICKS_CLUSTER_ID" ]
         then
         JSON=`cat << EOM
         {
@@ -78,12 +78,11 @@ jobs:
           "init_scripts_safe_mode": false
         }
         EOM`
-    - name: Start Cluster
-      run: |
         DATABRICKS_CLUSTER_ID=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
         sleep 10
         fi
-
+    - name: Start Cluster
+      run: |
         DATABRICKS_CLUSTER_STATE=$(databricks clusters get --cluster-id "$DATABRICKS_CLUSTER_ID" | jq -r ".state")
         if [ $DATABRICKS_CLUSTER_STATE == "TERMINATED" ]
         then

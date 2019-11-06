@@ -81,7 +81,7 @@ jobs:
         DATABRICKS_CLUSTER_ID=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
         sleep 10
         fi
-        
+
         echo "::set-env name=DATABRICKS_CLUSTER_ID::$DATABRICKS_CLUSTER_ID"
     - name: Start Cluster
       run: |
@@ -136,6 +136,8 @@ jobs:
         
         DATABRICKS_JOB_TRAIN_ID=$(databricks jobs create --json "$JSON" | jq ".job_id")
         fi
+        
+        echo "::set-env name=DATABRICKS_JOB_TRAIN_ID::$DATABRICKS_JOB_TRAIN_ID"
     - name: Run Training Jobs
       run: |
         echo "Running job with ID $DATABRICKS_JOB_TRAIN_ID with alpha=0.1, l1_ratio=0.1..."

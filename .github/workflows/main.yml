@@ -122,7 +122,7 @@ jobs:
           echo "Library Status: $library_status"
         fi
         
-        while [ $library_status == "PENDING" -o $library_status == "INSTALLING"]
+        while [ $library_status == "PENDING" -o $library_status == "INSTALLING" ]
         do
           sleep 30
           library_status=$(databricks libraries list --cluster-id $DATABRICKS_CLUSTER_ID | jq -c '.library_statuses[] | select( .library.pypi.package == "azureml-sdk[databricks]" ) | .status' -r)

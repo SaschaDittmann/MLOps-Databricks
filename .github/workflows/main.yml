@@ -88,7 +88,7 @@ jobs:
         echo "Checking Cluster State (Cluster ID: $DATABRICKS_CLUSTER_ID)..."
         DATABRICKS_CLUSTER_STATE=$(databricks clusters get --cluster-id "$DATABRICKS_CLUSTER_ID" | jq -r ".state")
         echo "Cluster State: $DATABRICKS_CLUSTER_STATE"
-
+        
         if [ $DATABRICKS_CLUSTER_STATE == "TERMINATED" ]
         then
           echo "Starting Databricks Cluster..."

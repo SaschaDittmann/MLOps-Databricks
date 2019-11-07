@@ -116,7 +116,10 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
+          echo "Checking Cluster State (Cluster ID: $(databricks.cluster.id))..."
           cluster_state=$(databricks clusters get --cluster-id "$(databricks.cluster.id)" | jq -r ".state")
+          echo "Cluster State: $cluster_state"
+          
           if [ $cluster_state == "TERMINATED" ]
           then
             echo "Starting Databricks Cluster..."

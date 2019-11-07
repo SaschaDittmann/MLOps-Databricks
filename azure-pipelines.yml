@@ -143,6 +143,36 @@ stages:
             exit 1
           fi
     - task: Bash@3
+      displayName: 'Install Azure ML SDK'
+      inputs:
+        targetType: 'inline'
+        script: |
+          set -x
+          
+          library_status=$(databricks libraries list --cluster-id $(databricks.cluster.id) | jq -c '.library_statuses[] | select( .library.pypi.package == "azureml-sdk[databricks]" ) | .status' -r)
+          if [ -z "$library_status" ]
+          then
+            echo "Installing azureml-sdk[databricks] library to $(databricks.cluster.id)..."
+            databricks libraries install --cluster-id "$(databricks.cluster.id)" --pypi-package 'azureml-sdk[databricks]'
+            sleep 10
+            library_status=$(databricks libraries list --cluster-id $(databricks.cluster.id) | jq -c '.library_statuses[] | select( .library.pypi.package == "azureml-sdk[databricks]" ) | .status' -r)
+            echo "Library Status: $library_status"
+          fi
+          
+          while [ $library_status == "PENDING" -o $library_status == "INSTALLING" ]
+          do
+            sleep 30
+            library_status=$(databricks libraries list --cluster-id $(databricks.cluster.id) | jq -c '.library_statuses[] | select( .library.pypi.package == "azureml-sdk[databricks]" ) | .status' -r)
+            echo "Library Status: $library_status"
+          done
+          
+          if [ $library_status == "INSTALLED" ]
+          then
+            exit 0
+          else
+            exit 1
+          fi
+    - task: Bash@3
       displayName: 'Create / Get Training Job'
       inputs:
         targetType: 'inline'
@@ -153,6 +183,7 @@ stages:
           
           if [ -z "$job_id" ]
           then
+          echo "Creating $(databricks.job.train.name) job..."
           JSON=`cat << EOM
           {
             "notebook_task": {

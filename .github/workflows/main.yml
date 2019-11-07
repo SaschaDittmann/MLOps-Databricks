@@ -146,6 +146,7 @@ jobs:
         
         if [ -z "$DATABRICKS_JOB_TRAIN_ID" ]
         then
+        echo "Creating $DATABRICKS_JOB_TRAIN_NAME job..."
         JSON=`cat << EOM
         {
           "notebook_task": {

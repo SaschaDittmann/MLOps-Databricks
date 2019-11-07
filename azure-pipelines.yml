@@ -363,40 +363,16 @@ stages:
                 # hostname, username, password
                 echo "$conf" | databricks configure --token
           - task: Bash@3
-            displayName: 'Create / Get Cluster'
+            displayName: 'Get Cluster ID'
             inputs:
               targetType: 'inline'
               script: |
                 cluster_id=$(databricks clusters list | grep "$(databricks.cluster.name)" | awk '{print $1}')
-                
                 if [ -z "$cluster_id" ]
                 then
-                JSON=`cat << EOM
-                {
-                  "cluster_name": "$(databricks.cluster.name)",
-                  "spark_version": "$(databricks.cluster.spark_version)",
-                  "spark_conf": {
-                    "spark.databricks.delta.preview.enabled": "true"
-                  },
-                  "node_type_id": "$(databricks.cluster.node_type_id)",
-                  "driver_node_type_id": "$(databricks.cluster.driver_node_type_id)",
-                  "spark_env_vars": {
-                    "PYSPARK_PYTHON": "/databricks/python3/bin/python3"
-                  },
-                  "autotermination_minutes": $(databricks.cluster.autotermination_minutes),
-                  "enable_elastic_disk": true,
-                  "autoscale": {
-                    "min_workers": $(databricks.cluster.workers.min),
-                    "max_workers": $(databricks.cluster.workers.max)
-                  },
-                  "init_scripts_safe_mode": false
-                }
-                EOM`
-                
-                cluster_id=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
-                sleep 10
+                  echo "ERROR: Unable to get Cluster ID"
+                  exit 1
                 fi
-                
                 echo "##vso[task.setvariable variable=databricks.cluster.id;]$cluster_id"
           - task: Bash@3
             displayName: 'Create / Get Deploy ACI Job'
@@ -435,8 +411,12 @@ stages:
               script: |
                 echo "Retrieving Image ID..."
                 model_image_id=$(cat image.json | jq -r ".model_image_id")
+                if [ -z "$model_image_id" ]
+                then
+                  echo "ERROR: Unable to get Image ID"
+                  exit 1
+                fi
                 echo "  Image ID: $model_image_id"
-                
                 echo "##vso[task.setvariable variable=azureml.image.id;]$model_image_id"
               workingDirectory: '$(System.ArtifactsDirectory)/drop/metadata'
           - task: Bash@3
@@ -517,40 +497,16 @@ stages:
                 # hostname, username, password
                 echo "$conf" | databricks configure --token
           - task: Bash@3
-            displayName: 'Create / Get Cluster'
+            displayName: 'Get Cluster ID'
             inputs:
               targetType: 'inline'
               script: |
                 cluster_id=$(databricks clusters list | grep "$(databricks.cluster.name)" | awk '{print $1}')
-                
                 if [ -z "$cluster_id" ]
                 then
-                JSON=`cat << EOM
-                {
-                  "cluster_name": "$(databricks.cluster.name)",
-                  "spark_version": "$(databricks.cluster.spark_version)",
-                  "spark_conf": {
-                    "spark.databricks.delta.preview.enabled": "true"
-                  },
-                  "node_type_id": "$(databricks.cluster.node_type_id)",
-                  "driver_node_type_id": "$(databricks.cluster.driver_node_type_id)",
-                  "spark_env_vars": {
-                    "PYSPARK_PYTHON": "/databricks/python3/bin/python3"
-                  },
-                  "autotermination_minutes": $(databricks.cluster.autotermination_minutes),
-                  "enable_elastic_disk": true,
-                  "autoscale": {
-                    "min_workers": $(databricks.cluster.workers.min),
-                    "max_workers": $(databricks.cluster.workers.max)
-                  },
-                  "init_scripts_safe_mode": false
-                }
-                EOM`
-                
-                cluster_id=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
-                sleep 10
+                  echo "ERROR: Unable to get Cluster ID"
+                  exit 1
                 fi
-                
                 echo "##vso[task.setvariable variable=databricks.cluster.id;]$cluster_id"
           - task: Bash@3
             displayName: 'Create / Get Deploy AKS Job'
@@ -589,8 +545,12 @@ stages:
               script: |
                 echo "Retrieving Image ID..."
                 model_image_id=$(cat image.json | jq -r ".model_image_id")
+                if [ -z "$model_image_id" ]
+                then
+                  echo "ERROR: Unable to get Image ID"
+                  exit 1
+                fi
                 echo "  Image ID: $model_image_id"
-                
                 echo "##vso[task.setvariable variable=azureml.image.id;]$model_image_id"
               workingDirectory: '$(System.ArtifactsDirectory)/drop/metadata'
           - task: Bash@3

@@ -342,7 +342,7 @@ jobs:
         job_id=$(databricks jobs create --json "$JSON" | jq ".job_id")
         fi
         
-        echo "::set-env name=DATABRICKS_JOB_DEPLOYTOACI_ID::$DATABRICKS_CLUSTER_ID"
+        echo "::set-env name=DATABRICKS_JOB_DEPLOYTOACI_ID::$job_id"
     
     - name: Get Image ID
       run: |

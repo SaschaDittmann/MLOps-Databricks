@@ -108,6 +108,33 @@ jobs:
         else
           exit 1
         fi
+    - name: Install Azure ML SDK
+      run: |
+        set -x
+        
+        library_status=$(databricks libraries list --cluster-id $DATABRICKS_CLUSTER_ID | jq -c '.library_statuses[] | select( .library.pypi.package == "azureml-sdk[databricks]" ) | .status' -r)
+        if [ -z "$library_status" ]
+        then
+          echo "Installing azureml-sdk[databricks] library to $DATABRICKS_CLUSTER_ID..."
+          databricks libraries install --cluster-id "$DATABRICKS_CLUSTER_ID" --pypi-package 'azureml-sdk[databricks]'
+          sleep 10
+          library_status=$(databricks libraries list --cluster-id $DATABRICKS_CLUSTER_ID | jq -c '.library_statuses[] | select( .library.pypi.package == "azureml-sdk[databricks]" ) | .status' -r)
+          echo "Library Status: $library_status"
+        fi
+        
+        while [ $library_status == "PENDING" -o $library_status == "INSTALLING"]
+        do
+          sleep 30
+          library_status=$(databricks libraries list --cluster-id $DATABRICKS_CLUSTER_ID | jq -c '.library_statuses[] | select( .library.pypi.package == "azureml-sdk[databricks]" ) | .status' -r)
+          echo "Library Status: $library_status"
+        done
+        
+        if [ $library_status == "INSTALLED" ]
+        then
+          exit 0
+        else
+          exit 1
+        fi
     - name: Create / Get Training Job
       run: |
         set -x

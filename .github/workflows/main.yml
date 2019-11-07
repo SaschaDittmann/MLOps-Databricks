@@ -33,8 +33,6 @@ jobs:
         pip install -U databricks-cli
     - name: Configure Databricks CLI
       run: |
-        set -x
-        
         # We need to write the pipe the conf into databricks configure --token since
         # that command only takes inputs from stdin. 
         conf=`cat << EOM
@@ -51,8 +49,6 @@ jobs:
       run: 'databricks workspace import_dir --overwrite notebooks "$DATABRICKS_NOTEBOOK_PATH"'
     - name: Create / Get Cluster
       run: |
-        set -x
-        
         DATABRICKS_CLUSTER_ID=$(databricks clusters list | grep "$DATABRICKS_CLUSTER_NAME" | awk '{print $1}')
         
         if [ -z "$DATABRICKS_CLUSTER_ID" ]
@@ -113,8 +109,6 @@ jobs:
         fi
     - name: Install Azure ML SDK
       run: |
-        set -x
-        
         library_status=$(databricks libraries list --cluster-id $DATABRICKS_CLUSTER_ID | jq -c '.library_statuses[] | select( .library.pypi.package == "azureml-sdk[databricks]" ) | .status' -r)
         if [ -z "$library_status" ]
         then
@@ -140,8 +134,6 @@ jobs:
         fi
     - name: Create / Get Training Job
       run: |
-        set -x
-          
         DATABRICKS_JOB_TRAIN_ID=$(databricks jobs list | grep "$DATABRICKS_JOB_TRAIN_NAME" | awk '{print $1}')
         
         if [ -z "$DATABRICKS_JOB_TRAIN_ID" ]
@@ -299,8 +291,6 @@ jobs:
         pip install -U databricks-cli
     - name: Configure Databricks CLI
       run: |
-        set -x
-        
         # We need to write the pipe the conf into databricks configure --token since
         # that command only takes inputs from stdin. 
         conf=`cat << EOM
@@ -313,8 +303,6 @@ jobs:
         echo "$conf" | databricks configure --token
     - name: Create / Get Cluster
       run: |
-        set -x
-        
         DATABRICKS_CLUSTER_ID=$(databricks clusters list | grep "$DATABRICKS_CLUSTER_NAME" | awk '{print $1}')
         
         if [ -z "$DATABRICKS_CLUSTER_ID" ]
@@ -347,8 +335,6 @@ jobs:
         echo "::set-env name=DATABRICKS_CLUSTER_ID::$DATABRICKS_CLUSTER_ID"
     - name: Create / Get Deploy ACI Job
       run: |
-        set -x
-        
         job_id=$(databricks jobs list | grep "$DATABRICKS_JOB_DEPLOYTOACI_NAME" | awk '{print $1}')
         
         if [ -z "$job_id" ]

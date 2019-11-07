@@ -51,8 +51,6 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
-          set -x
-          
           # We need to write the pipe the conf into databricks configure --token since
           # that command only takes inputs from stdin. 
           conf=`cat << EOM
@@ -78,8 +76,6 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
-          set -x
-          
           cluster_id=$(databricks clusters list | grep "$(databricks.cluster.name)" | awk '{print $1}')
           
           if [ -z "$cluster_id" ]
@@ -147,8 +143,6 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
-          set -x
-          
           library_status=$(databricks libraries list --cluster-id $(databricks.cluster.id) | jq -c '.library_statuses[] | select( .library.pypi.package == "azureml-sdk[databricks]" ) | .status' -r)
           if [ -z "$library_status" ]
           then
@@ -177,8 +171,6 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
-          set -x
-          
           job_id=$(databricks jobs list | grep "$(databricks.job.train.name)" | awk '{print $1}')
           
           if [ -z "$job_id" ]
@@ -360,8 +352,6 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                set -x
-                
                 # We need to write the pipe the conf into databricks configure --token since
                 # that command only takes inputs from stdin. 
                 conf=`cat << EOM
@@ -377,8 +367,6 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                set -x
-                
                 cluster_id=$(databricks clusters list | grep "$(databricks.cluster.name)" | awk '{print $1}')
                 
                 if [ -z "$cluster_id" ]
@@ -415,8 +403,6 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                set -x
-                
                 job_id=$(databricks jobs list | grep "$(databricks.job.deploytoaci.name)" | awk '{print $1}')
                 
                 if [ -z "$job_id" ]
@@ -520,8 +506,6 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                set -x
-                
                 # We need to write the pipe the conf into databricks configure --token since
                 # that command only takes inputs from stdin. 
                 conf=`cat << EOM
@@ -537,8 +521,6 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                set -x
-                
                 cluster_id=$(databricks clusters list | grep "$(databricks.cluster.name)" | awk '{print $1}')
                 
                 if [ -z "$cluster_id" ]
@@ -575,8 +557,6 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                set -x
-                
                 job_id=$(databricks jobs list | grep "$(databricks.job.deploytoaks.name)" | awk '{print $1}')
                 
                 if [ -z "$job_id" ]

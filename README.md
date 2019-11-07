@@ -1,4 +1,5 @@
-# MLOps using Azure Databricks, Azure DevOps and Azure ML Services
+# MLOps for Azure Databricks Example
+
 This repo is used in a tutorial for learning how to do DevOps for Machine Learning (also called MLOps) using Azure Databricks and Azure ML Services.
 
 The DevOps Pipelines are defined using the [azure-pipelines.yml](./azure-pipelines.yml) for Azure DevOps, as well as [main.yml](./.github/workflows/main.yml) for GitHub Actions.

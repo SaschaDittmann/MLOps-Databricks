@@ -50,9 +50,9 @@ jobs:
     - name: Create / Get Cluster
       run: |
         DATABRICKS_CLUSTER_ID=$(databricks clusters list | grep "$DATABRICKS_CLUSTER_NAME" | awk '{print $1}')
-        
         if [ -z "$DATABRICKS_CLUSTER_ID" ]
         then
+        echo "Creating new Databricks Cluster..."
         JSON=`cat << EOM
         {
           "cluster_name": "$DATABRICKS_CLUSTER_NAME",
@@ -76,8 +76,9 @@ jobs:
         EOM`
         DATABRICKS_CLUSTER_ID=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
         sleep 10
+        else
+        echo "Existing Databricks Cluster found (Cluster ID: $DATABRICKS_CLUSTER_ID)"
         fi
-
         echo "::set-env name=DATABRICKS_CLUSTER_ID::$DATABRICKS_CLUSTER_ID"
     - name: Start Cluster
       run: |
@@ -135,7 +136,6 @@ jobs:
     - name: Create / Get Training Job
       run: |
         DATABRICKS_JOB_TRAIN_ID=$(databricks jobs list | grep "$DATABRICKS_JOB_TRAIN_NAME" | awk '{print $1}')
-        
         if [ -z "$DATABRICKS_JOB_TRAIN_ID" ]
         then
         echo "Creating $DATABRICKS_JOB_TRAIN_NAME job..."
@@ -157,8 +157,9 @@ jobs:
         }
         EOM`
         DATABRICKS_JOB_TRAIN_ID=$(databricks jobs create --json "$JSON" | jq ".job_id")
+        else
+        echo "Existing $DATABRICKS_JOB_TRAIN_NAME job found (Job ID: $DATABRICKS_JOB_TRAIN_ID)."
         fi
-        
         echo "::set-env name=DATABRICKS_JOB_TRAIN_ID::$DATABRICKS_JOB_TRAIN_ID"
     - name: Run Training Jobs
       run: |
@@ -335,9 +336,9 @@ jobs:
     - name: Create / Get Deploy ACI Job
       run: |
         job_id=$(databricks jobs list | grep "$DATABRICKS_JOB_DEPLOYTOACI_NAME" | awk '{print $1}')
-        
         if [ -z "$job_id" ]
         then
+        echo "Creating $DATABRICKS_JOB_DEPLOYTOACI_NAME job..."
         JSON=`cat << EOM
         {
           "notebook_task": {
@@ -354,12 +355,11 @@ jobs:
           "email_notifications": {}
         }
         EOM`
-        
         job_id=$(databricks jobs create --json "$JSON" | jq ".job_id")
+        else
+        echo "Existing $DATABRICKS_JOB_DEPLOYTOACI_NAME job found (Job ID: $job_id)."
         fi
-        
         echo "::set-env name=DATABRICKS_JOB_DEPLOYTOACI_ID::$job_id"
-    
     - name: Get Image ID
       run: |
         echo "Retrieving Image ID..."
@@ -470,9 +470,9 @@ jobs:
     - name: Create / Get Deploy AKS Job
       run: |
         job_id=$(databricks jobs list | grep "$DATABRICKS_JOB_DEPLOYTOAKS_NAME" | awk '{print $1}')
-        
         if [ -z "$job_id" ]
         then
+        echo "Creating $DATABRICKS_JOB_DEPLOYTOAKS_NAME job..."
         JSON=`cat << EOM
         {
           "notebook_task": {
@@ -489,12 +489,11 @@ jobs:
           "email_notifications": {}
         }
         EOM`
-        
         job_id=$(databricks jobs create --json "$JSON" | jq ".job_id")
+        else
+        echo "Existing $DATABRICKS_JOB_DEPLOYTOAKS_NAME job found (Job ID: $job_id)."
         fi
-        
         echo "::set-env name=DATABRICKS_JOB_DEPLOYTOAKS_ID::$job_id"
-    
     - name: Get Image ID
       run: |
         echo "Retrieving Image ID..."

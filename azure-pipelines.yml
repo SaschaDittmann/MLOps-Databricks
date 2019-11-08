@@ -203,18 +203,10 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
-          echo "Running job with ID $(databricks.job.train.id) with alpha=0.1, l1_ratio=0.1..."
-          run_id1=$(databricks jobs run-now --job-id $(databricks.job.train.id) --notebook-params '{ "alpha": "0.1", "l1_ratio": "0.1" }' | jq ".run_id")
-          echo "  Run ID: $run_id1"
-          
-          echo "Running job with ID $(databricks.job.train.id) with alpha=0.3, l1_ratio=0.3..."
-          run_id2=$(databricks jobs run-now --job-id $(databricks.job.train.id) --notebook-params '{ "alpha": "0.3", "l1_ratio": "0.3" }' | jq ".run_id")
-          echo "  Run ID: $run_id2"
-          
           echo "Running job with ID $(databricks.job.train.id) with alpha=0.5, l1_ratio=0.5..."
-          run_id3=$(databricks jobs run-now --job-id $(databricks.job.train.id) --notebook-params '{ "alpha": "0.5", "l1_ratio": "0.5" }' | jq ".run_id")
-          echo "  Run ID: $run_id3"
-          
+          run_id1=$(databricks jobs run-now --job-id $(databricks.job.train.id) --notebook-params '{ "alpha": "0.5", "l1_ratio": "0.5" }' | jq ".run_id")
+          echo "  Run ID: $run_id1"
+
           run_state=$(databricks runs get --run-id $run_id1 | jq -r ".state.life_cycle_state")
           echo "Run State (ID $run_id1): $run_state"
           while [ $run_state == "RUNNING" -o $run_state == "PENDING" ]
@@ -226,6 +218,14 @@ stages:
           result_state1=$(databricks runs get --run-id $run_id1 | jq -r ".state.result_state")
           state_message1=$(databricks runs get --run-id $run_id1 | jq -r ".state.state_message")
           echo "Result State (ID $run_id1): $result_state1, Message: $state_message1"
+          
+          echo "Running job with ID $(databricks.job.train.id) with alpha=0.3, l1_ratio=0.3..."
+          run_id2=$(databricks jobs run-now --job-id $(databricks.job.train.id) --notebook-params '{ "alpha": "0.3", "l1_ratio": "0.3" }' | jq ".run_id")
+          echo "  Run ID: $run_id2"
+          
+          echo "Running job with ID $(databricks.job.train.id) with alpha=0.1, l1_ratio=0.1..."
+          run_id3=$(databricks jobs run-now --job-id $(databricks.job.train.id) --notebook-params '{ "alpha": "0.1", "l1_ratio": "0.1" }' | jq ".run_id")
+          echo "  Run ID: $run_id3"
           
           run_state=$(databricks runs get --run-id $run_id2 | jq -r ".state.life_cycle_state")
           echo "Run State (ID $run_id2): $run_state"

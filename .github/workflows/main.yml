@@ -74,7 +74,7 @@ jobs:
           "init_scripts_safe_mode": false
         }
         EOM`
-        DATABRICKS_CLUSTER_ID=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
+        DATABRICKS_CLUSTER_ID=$(databricks clusters create --json "$JSON" | jq -r ".cluster_id")
         sleep 10
         else
         echo "Existing Databricks Cluster found (Cluster ID: $DATABRICKS_CLUSTER_ID)"

@@ -102,7 +102,7 @@ stages:
           }
           EOM`
           
-          cluster_id=$(databricks clusters create --json "$JSON" | jq ".cluster_id")
+          cluster_id=$(databricks clusters create --json "$JSON" | jq -r ".cluster_id")
           sleep 10
           fi
           

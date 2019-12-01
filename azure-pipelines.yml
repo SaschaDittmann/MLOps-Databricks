@@ -147,7 +147,7 @@ stages:
           if [ -z "$library_status" ]
           then
             echo "Installing azureml-sdk[databricks] library to $(databricks.cluster.id)..."
-            databricks libraries install --cluster-id "$(databricks.cluster.id)" --pypi-package 'azureml-sdk[databricks]'
+            databricks libraries install --cluster-id "$(databricks.cluster.id)" --pypi-package 'azureml-sdk[databricks]==1.0.74'
             sleep 10
             library_status=$(databricks libraries list --cluster-id $(databricks.cluster.id) | jq -c '.library_statuses[] | select( .library.pypi.package == "azureml-sdk[databricks]" ) | .status' -r)
             echo "Library Status: $library_status"

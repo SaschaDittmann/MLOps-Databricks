@@ -19,6 +19,7 @@ variables:
   databricks.cluster.workers.max: 4
   databricks.job.train.name: Wine Quality (Train)
   databricks.job.train.id:
+  azureml.sdk: azureml-sdk[databricks]==1.0.74
   databricks.job.buildimage.name: Wine Quality (Build Container Image)
   azureml.image.id: 
   databricks.job.deploytoaci.name: Wine Quality (Deploy To ACI)
@@ -143,20 +144,20 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
-          library_status=$(databricks libraries list --cluster-id $(databricks.cluster.id) | jq -c '.library_statuses[] | select( .library.pypi.package == "azureml-sdk[databricks]" ) | .status' -r)
+          library_status=$(databricks libraries list --cluster-id $(databricks.cluster.id) | jq -c '.library_statuses[] | select( .library.pypi.package == "$(azureml.sdk)" ) | .status' -r)
           if [ -z "$library_status" ]
           then
-            echo "Installing azureml-sdk[databricks] library to $(databricks.cluster.id)..."
-            databricks libraries install --cluster-id "$(databricks.cluster.id)" --pypi-package 'azureml-sdk[databricks]'
+            echo "Installing $(azureml.sdk) library to $(databricks.cluster.id)..."
+            databricks libraries install --cluster-id "$(databricks.cluster.id)" --pypi-package "$(azureml.sdk)"
             sleep 10
-            library_status=$(databricks libraries list --cluster-id $(databricks.cluster.id) | jq -c '.library_statuses[] | select( .library.pypi.package == "azureml-sdk[databricks]" ) | .status' -r)
+            library_status=$(databricks libraries list --cluster-id $(databricks.cluster.id) | jq -c '.library_statuses[] | select( .library.pypi.package == "$(azureml.sdk)" ) | .status' -r)
             echo "Library Status: $library_status"
           fi
           
           while [ $library_status == "PENDING" -o $library_status == "INSTALLING" ]
           do
             sleep 30
-            library_status=$(databricks libraries list --cluster-id $(databricks.cluster.id) | jq -c '.library_statuses[] | select( .library.pypi.package == "azureml-sdk[databricks]" ) | .status' -r)
+            library_status=$(databricks libraries list --cluster-id $(databricks.cluster.id) | jq -c '.library_statuses[] | select( .library.pypi.package == "$(azureml.sdk)" ) | .status' -r)
             echo "Library Status: $library_status"
           done
           

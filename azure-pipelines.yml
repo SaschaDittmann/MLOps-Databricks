@@ -11,7 +11,7 @@ variables:
   databricks.notebook.path: /Shared/MLFlow
   databricks.cluster.name: ML
   databricks.cluster.id: 
-  databricks.cluster.spark_version: 5.5.x-cpu-ml-scala2.11
+  databricks.cluster.spark_version: 7.3.x-cpu-ml-scala2.12
   databricks.cluster.node_type_id: Standard_DS3_v2
   databricks.cluster.driver_node_type_id: Standard_DS3_v2
   databricks.cluster.autotermination_minutes: 15
@@ -19,7 +19,7 @@ variables:
   databricks.cluster.workers.max: 4
   databricks.job.train.name: Wine Quality (Train)
   databricks.job.train.id:
-  azureml.sdk: azureml-sdk[databricks]==1.0.74
+  azureml.sdk: azureml-sdk[databricks]==1.18.0
   databricks.job.buildimage.name: Wine Quality (Build Container Image)
   azureml.image.id: 
   databricks.job.deploytoaci.name: Wine Quality (Deploy To ACI)

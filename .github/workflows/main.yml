@@ -7,7 +7,7 @@ on: [push]
 
 jobs:
   train:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     env:
       DATABRICKS_HOST: https://westeurope.azuredatabricks.net
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
@@ -80,7 +80,7 @@ jobs:
         else
         echo "Existing Databricks Cluster found (Cluster ID: $DATABRICKS_CLUSTER_ID)"
         fi
-        echo "DATABRICKS_CLUSTER_ID='$DATABRICKS_CLUSTER_ID'" >> $GITHUB_ENV
+        echo "DATABRICKS_CLUSTER_ID=${DATABRICKS_CLUSTER_ID}" >> $GITHUB_ENV
     - name: Start Cluster
       run: |
         echo "Checking Cluster State (Cluster ID: $DATABRICKS_CLUSTER_ID)..."
@@ -265,7 +265,7 @@ jobs:
         path: image.json
   staging:
     needs: train
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     env:
       DATABRICKS_HOST: https://westeurope.azuredatabricks.net
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
@@ -399,7 +399,7 @@ jobs:
         fi
   production:
     needs: [train, staging]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     env:
       DATABRICKS_HOST: https://westeurope.azuredatabricks.net
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}

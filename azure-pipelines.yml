@@ -34,7 +34,7 @@ stages:
   - job: Train
     displayName: 'Train, Evaluate & Register Model'
     pool:
-      vmImage: 'ubuntu-latest'
+      vmImage: 'ubuntu-18.04'
     steps:
     - task: UsePythonVersion@0
       displayName: 'Use Python 3.6'
@@ -322,7 +322,7 @@ stages:
   - deployment: DeployToACI
     displayName: 'Deploy to Azure Container Instance'
     pool:
-      vmImage: 'ubuntu-latest'
+      vmImage: 'ubuntu-18.04'
     # creates an environment if it doesn’t exist
     environment: 'wine-quality-staging'
     strategy:
@@ -457,7 +457,7 @@ stages:
   - deployment: DeployToAKS
     displayName: 'Deploy to Azure Kubernetes Service'
     pool:
-      vmImage: 'ubuntu-latest'
+      vmImage: 'ubuntu-18.04'
     # creates an environment if it doesn’t exist
     environment: 'wine-quality-production'
     strategy:

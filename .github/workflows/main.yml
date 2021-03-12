@@ -80,7 +80,7 @@ jobs:
         else
         echo "Existing Databricks Cluster found (Cluster ID: $DATABRICKS_CLUSTER_ID)"
         fi
-        echo "DATABRICKS_CLUSTER_ID=$DATABRICKS_CLUSTER_ID" >> $GITHUB_ENV
+        echo "DATABRICKS_CLUSTER_ID='$DATABRICKS_CLUSTER_ID'" >> $GITHUB_ENV
     - name: Start Cluster
       run: |
         echo "Checking Cluster State (Cluster ID: $DATABRICKS_CLUSTER_ID)..."

@@ -99,4 +99,8 @@ with mlflow.start_run():
   mlflow.log_metric("r2", r2)
   mlflow.log_metric("mae", mae)
 
-  mlflow.sklearn.log_model(lr, "model")
+  mlflow.sklearn.log_model(
+    sk_model=lr,
+    artifact_path="model",
+    #registered_model_name="wine-quality-model"
+  )

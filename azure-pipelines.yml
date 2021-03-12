@@ -19,7 +19,7 @@ variables:
   databricks.cluster.workers.max: 4
   databricks.job.train.name: Wine Quality (Train)
   databricks.job.train.id:
-  azureml.sdk: azureml-sdk[databricks]==1.18.0
+  azureml.sdk: azureml-sdk[databricks]==1.23.0
   databricks.job.buildimage.name: Wine Quality (Build Container Image)
   azureml.image.id: 
   databricks.job.deploytoaci.name: Wine Quality (Deploy To ACI)

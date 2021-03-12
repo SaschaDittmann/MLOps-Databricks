@@ -19,7 +19,7 @@ jobs:
       DATABRICKS_CLUSTER_AUTOTERMINATION_MINUTES: 15
       DATABRICKS_CLUSTER_WORKERS_MIN: 1
       DATABRICKS_CLUSTER_WORKERS_MAX: 4
-      AZUREML_SDK: azureml-sdk[databricks]==1.18.0
+      AZUREML_SDK: azureml-sdk[databricks]==1.23.0
       DATABRICKS_JOB_TRAIN_NAME: Wine Quality (Train)
       DATABRICKS_JOB_BUILDIMAGE_NAME: Wine Quality (Build Container Image)
     steps:

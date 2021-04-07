@@ -1,3 +1,7 @@
+[![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat-square)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
+[![](https://ga4gh.azurewebsites.net/api?repo=MLOps-Databricks)](https://github.com/SaschaDittmann/gaforgithub)
+
 # MLOps for Azure Databricks Example
 
 This repo is used in a tutorial for learning how to do DevOps for Machine Learning (also called MLOps) using Azure Databricks and Azure ML Services.

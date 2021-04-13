@@ -1,6 +1,6 @@
 [![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat-square)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
-[![](https://ga4gh.azurewebsites.net/api?repo=MLOps-Databricks)](https://github.com/SaschaDittmann/gaforgithub)
+[![](https://ga4gh.datainsights.cloud/api?repo=MLOps-Databricks)](https://github.com/SaschaDittmann/gaforgithub)
 
 # MLOps for Azure Databricks Example
 
